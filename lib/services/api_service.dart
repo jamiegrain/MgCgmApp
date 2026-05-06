@@ -5,7 +5,7 @@ import 'package:mycgmapp/services/cloud_api_service.dart';
 
 class ApiService {
   Future<GraphResponse> fetchData() async {
-    final response = await http.get(Uri.parse(CloudRunService.baseUrl));
+    final response = await http.post(Uri.parse(CloudRunService.baseUrl));
 
     if (response.statusCode == 200) {
       return GraphResponse.fromJson(jsonDecode(response.body));

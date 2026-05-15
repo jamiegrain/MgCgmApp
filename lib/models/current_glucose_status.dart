@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:mycgmapp/constants.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/notification_service.dart';
 import 'graph_response.dart';
 
@@ -11,6 +11,28 @@ class CurrentGlucoseStatus extends ChangeNotifier {
   String? _error;
   String? _lastUpdateTime;
 
+  CurrentGlucoseStatus() {
+    _loadSnoozeSettings();
+    // Listen for snooze actions from notifications
+    _notificationService.snoozeStream.stream.listen((minutes) {
+      _loadSnoozeSettings();
+    });
+  }
+
+  Future<void> _loadSnoozeSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    final snoozeStr = prefs.getString('snooze_until');
+    if (snoozeStr != null) {
+      _snoozeUntil = DateTime.parse(snoozeStr);
+      if (_snoozeUntil!.isBefore(DateTime.now())) {
+        _snoozeUntil = null;
+      }
+    } else {
+      _snoozeUntil = null;
+    }
+    notifyListeners();
+  }
+
   double? get currentGlucose => _currentGlucose;
   List<GraphPoint> get graphPoints => _graphPoints;
   String? get error => _error;
@@ -19,13 +41,16 @@ class CurrentGlucoseStatus extends ChangeNotifier {
   bool get isSnoozed =>
       _snoozeUntil != null && _snoozeUntil!.isAfter(DateTime.now());
 
-  void updateSnoozeUntil(DateTime snoozeUntil) {
+  Future<void> updateSnoozeUntil(DateTime snoozeUntil) async {
     _snoozeUntil = snoozeUntil;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('snooze_until', snoozeUntil.toIso8601String());
     notifyListeners();
   }
 
-  void resetSnooze() {
+  Future<void> resetSnooze() async {
     _snoozeUntil = null;
+    await _notificationService.clearSnooze();
     notifyListeners();
   }
 
@@ -43,27 +68,11 @@ class CurrentGlucoseStatus extends ChangeNotifier {
       _lastUpdateTime = _formatTimestamp(data['timestamp']);
     }
 
-    if (_currentGlucose != null && !isSnoozed) {
-      _checkForAlerts(_currentGlucose!);
-    }
+    // Note: We no longer check for alerts here. 
+    // The BackgroundGlucoseService handles alerts directly via NotificationService,
+    // which ensures they fire even if the app is closed or in the background.
     
     notifyListeners();
-  }
-
-  void _checkForAlerts(double glucoseValue) {
-    if (glucoseValue > AppConstants.highLimit) {
-      _notificationService.showNotification(
-        0,
-        'High Glucose Alert',
-        'Your glucose level is high: $glucoseValue',
-      );
-    } else if (glucoseValue < AppConstants.lowLimit) {
-      _notificationService.showNotification(
-        1,
-        'Low Glucose Alert',
-        'Your glucose level is low: $glucoseValue',
-      );
-    }
   }
 
   String _formatTimestamp(String isoString) {

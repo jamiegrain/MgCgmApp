@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:mycgmapp/services/cloud_api_service.dart';
+import 'package:mycgmapp/services/notification_service.dart';
 
 /// Background service for glucose monitoring
 class BackgroundGlucoseService {
@@ -63,25 +64,25 @@ class GlucoseMonitorTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     print('Glucose monitoring started at: $timestamp');
+    // Execute immediately on start
+    await _performUpdate();
   }
 
   @override
   void onRepeatEvent(DateTime timestamp) async {
+    // Execute on every interval
+    await _performUpdate();
+  }
+
+  Future<void> _performUpdate() async {
     final result = await _service.fetchAndCheckGlucose();
 
     if (result.value != null) {
-      FlutterForegroundTask.updateService(
-        notificationTitle: 'Glucose Monitoring Active',
-        notificationText: 'App is running in the background',
-      );
-    } else if (result.error != null) {
-      FlutterForegroundTask.updateService(
-        notificationTitle: 'Glucose Monitoring',
-        notificationText: 'Connection issue detected',
-      );
+      // Check for alerts in the background. This handles its own snooze check.
+      await NotificationService().checkAndNotify(result.value!);
     }
 
-    // Send result back to the main app for UI update and "Live" notification
+    // Send result back to the main app for UI update
     FlutterForegroundTask.sendDataToMain(result.toJson());
   }
 

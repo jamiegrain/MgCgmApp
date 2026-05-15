@@ -48,21 +48,35 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   bool _isRunning = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initForegroundTask();
     _checkTaskStatus();
     FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+    
+    // Initial attempt to start
+    _startForegroundTask();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Re-check and attempt to start when returning from permission/settings screens
+      _checkTaskStatus();
+      _startForegroundTask();
+    }
   }
 
   void _onReceiveTaskData(Object data) {
@@ -74,11 +88,11 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _initForegroundTask() async {
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
-        channelId: 'glucose_monitor_channel',
+        channelId: 'glucose_monitor_channel_v2',
         channelName: 'Glucose Monitoring',
         channelDescription: 'Monitors glucose levels in the background',
-        channelImportance: NotificationChannelImportance.LOW,
-        priority: NotificationPriority.LOW,
+        channelImportance: NotificationChannelImportance.MAX,
+        priority: NotificationPriority.HIGH,
       ),
       iosNotificationOptions: const IOSNotificationOptions(
         showNotification: true,
@@ -98,17 +112,36 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _checkTaskStatus() async {
     final isRunning = await FlutterForegroundTask.isRunningService;
-    setState(() {
-      _isRunning = isRunning;
-    });
+    if (mounted) {
+      setState(() {
+        _isRunning = isRunning;
+      });
+    }
   }
 
   Future<void> _startForegroundTask() async {
-    final notificationPermission =
+    // If already running, don't try to start again
+    if (await FlutterForegroundTask.isRunningService) return;
+
+    // 1. Check/Request Notification Permission
+    NotificationPermission notificationPermission =
         await FlutterForegroundTask.checkNotificationPermission();
     if (notificationPermission != NotificationPermission.granted) {
-      await FlutterForegroundTask.requestNotificationPermission();
+      notificationPermission = await FlutterForegroundTask.requestNotificationPermission();
     }
+    
+    if (notificationPermission != NotificationPermission.granted) return;
+
+    // 2. Check/Request Battery Optimization Exemption
+    if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
+      // This opens a system dialog/settings page. 
+      // The lifecycle observer will trigger this function again when the user returns.
+      await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+      return;
+    }
+
+    // 3. Start the service
+    await Future.delayed(const Duration(milliseconds: 500));
 
     final result = await FlutterForegroundTask.startService(
       notificationTitle: 'Glucose Monitoring Active',
@@ -118,18 +151,7 @@ class _MyHomePageState extends State<MyHomePage> {
     );
 
     if (result is ServiceRequestSuccess) {
-      setState(() {
-        _isRunning = true;
-      });
-    }
-  }
-
-  Future<void> _stopForegroundTask() async {
-    final result = await FlutterForegroundTask.stopService();
-    if (result is ServiceRequestSuccess) {
-      setState(() {
-        _isRunning = false;
-      });
+      _checkTaskStatus();
     }
   }
 
@@ -237,13 +259,25 @@ class _MyHomePageState extends State<MyHomePage> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: () {
+                      PopupMenuButton<int>(
+                        onSelected: (minutes) {
                           status.updateSnoozeUntil(
-                            DateTime.now().add(const Duration(minutes: 30)),
+                            DateTime.now().add(Duration(minutes: minutes)),
                           );
                         },
-                        child: const Text('Snooze alerts (30m)'),
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(value: 30, child: Text('Snooze 30 mins')),
+                          const PopupMenuItem(value: 60, child: Text('Snooze 60 mins')),
+                          const PopupMenuItem(value: 120, child: Text('Snooze 120 mins')),
+                        ],
+                        child: TextButton.icon(
+                          onPressed: null,
+                          style: TextButton.styleFrom(
+                            disabledForegroundColor: Colors.blue,
+                          ),
+                          icon: const Icon(Icons.snooze),
+                          label: const Text('Snooze alerts...'),
+                        ),
                       ),
                     ],
                   ],
@@ -324,28 +358,6 @@ class _MyHomePageState extends State<MyHomePage> {
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
-
-              // Start/Stop button
-              ElevatedButton.icon(
-                onPressed: _isRunning
-                    ? _stopForegroundTask
-                    : _startForegroundTask,
-                icon: Icon(_isRunning ? Icons.stop : Icons.play_arrow),
-                label: Text(
-                  _isRunning ? 'Stop Monitoring' : 'Start Monitoring',
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _isRunning ? Colors.red : Colors.green,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 16,
-                  ),
-                  textStyle: const TextStyle(fontSize: 18),
-                ),
-              ),
-
               const SizedBox(height: 16),
               Text(
                 'Auto-checks every ${AppConstants.pollingIntervalMinutes} minutes',

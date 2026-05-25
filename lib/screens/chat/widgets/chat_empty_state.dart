@@ -7,9 +7,9 @@ class ChatEmptyState extends StatelessWidget {
     : super(key: key);
 
   static const List<String> _suggestions = [
-    "How did my sleep and recovery impact my glucose today?",
-    "How are my recent Garmin activities affecting my blood sugar?",
-    "Given the last few days, should I adjust my insulin ratio up or down?",
+    "How did my sleep and recovery impact my glucose trends today?",
+    "What patterns do you see between my Garmin activities and blood sugar?",
+    "Analyze my post-meal glucose curves over the last few days to see how well I return to range.",
   ];
 
   @override

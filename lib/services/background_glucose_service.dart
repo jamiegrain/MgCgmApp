@@ -3,12 +3,18 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:mycgmapp/services/cloud_api_service.dart';
 import 'package:mycgmapp/services/notification_service.dart';
+import 'package:mycgmapp/services/database_service.dart';
 
 /// Background service for glucose monitoring
 class BackgroundGlucoseService {
+  final DatabaseService _dbService = DatabaseService();
+
   Future<GlucoseResult> fetchAndCheckGlucose() async {
     try {
       final response = await http.get(Uri.parse(CloudRunService.baseUrl));
+      
+      // Fetch activity status from database
+      final bool isActivityInProgress = await _dbService.checkActivityStatus();
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
@@ -19,6 +25,7 @@ class BackgroundGlucoseService {
               .toDouble(),
           graphData: data['graphData'] as List<dynamic>,
           timestamp: DateTime.now(),
+          isActivityInProgress: isActivityInProgress,
         );
       } else {
         throw Exception(
@@ -31,6 +38,7 @@ class BackgroundGlucoseService {
         value: null,
         graphData: null,
         timestamp: DateTime.now(),
+        isActivityInProgress: false, // Default state
         error: e.toString(),
       );
     }
@@ -41,12 +49,14 @@ class GlucoseResult {
   final double? value;
   final List<dynamic>? graphData;
   final DateTime timestamp;
+  final bool isActivityInProgress;
   final String? error;
 
   GlucoseResult({
     required this.value,
     this.graphData,
     required this.timestamp,
+    this.isActivityInProgress = false,
     this.error,
   });
 
@@ -54,6 +64,7 @@ class GlucoseResult {
     'value': value,
     'graphData': graphData,
     'timestamp': timestamp.toIso8601String(),
+    'isActivityInProgress': isActivityInProgress,
     'error': error,
   };
 }
@@ -64,13 +75,13 @@ class GlucoseMonitorTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     print('Glucose monitoring started at: $timestamp');
-    // Execute immediately on start
+    // Initialize NotificationService in this isolate
+    await NotificationService().init();
     await _performUpdate();
   }
 
   @override
   void onRepeatEvent(DateTime timestamp) async {
-    // Execute on every interval
     await _performUpdate();
   }
 
@@ -78,11 +89,13 @@ class GlucoseMonitorTaskHandler extends TaskHandler {
     final result = await _service.fetchAndCheckGlucose();
 
     if (result.value != null) {
-      // Check for alerts in the background. This handles its own snooze check.
-      await NotificationService().checkAndNotify(result.value!);
+      // Pass activity status to notification check
+      await NotificationService().checkAndNotify(
+        result.value!, 
+        isActivityInProgress: result.isActivityInProgress,
+      );
     }
 
-    // Send result back to the main app for UI update
     FlutterForegroundTask.sendDataToMain(result.toJson());
   }
 

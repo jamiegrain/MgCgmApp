@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../models/graph_response.dart';
 import '../constants.dart';
 
@@ -24,6 +25,8 @@ class GlucoseChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final constants = context.watch<AppConstants>();
+
     if (points.isEmpty) {
       return const SizedBox(
         height: 200,
@@ -118,7 +121,7 @@ class GlucoseChart extends StatelessWidget {
             ),
             // High limit line
             LineChartBarData(
-              spots: [FlSpot(minX, AppConstants.highLimit), FlSpot(maxX, AppConstants.highLimit)],
+              spots: [FlSpot(minX, constants.highLimit), FlSpot(maxX, constants.highLimit)],
               dashArray: [5, 5],
               color: Colors.orange.withValues(alpha: 0.5),
               barWidth: 1,
@@ -126,7 +129,7 @@ class GlucoseChart extends StatelessWidget {
             ),
             // Low limit line
             LineChartBarData(
-              spots: [FlSpot(minX, AppConstants.lowLimit), FlSpot(maxX, AppConstants.lowLimit)],
+              spots: [FlSpot(minX, constants.lowLimit), FlSpot(maxX, constants.lowLimit)],
               dashArray: [5, 5],
               color: Colors.red.withValues(alpha: 0.5),
               barWidth: 1,

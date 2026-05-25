@@ -1,5 +1,10 @@
-class AppConstants {
-  static const double highLimit = 11.6;
-  static const double lowLimit = 4.0;
-  static const int pollingIntervalMinutes = 5;
+abstract interface class AppConstants {
+  double get lowLimit;
+  double get highLimit;
+  double get activityLowLimit;
+  double get activityHighLimit;
+  int get pollingIntervalMinutes;
+
+  double getLowLimit(bool isActivityInProgress);
+  double getHighLimit(bool isActivityInProgress);
 }

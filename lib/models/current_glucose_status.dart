@@ -10,6 +10,7 @@ class CurrentGlucoseStatus extends ChangeNotifier {
   DateTime? _snoozeUntil;
   String? _error;
   String? _lastUpdateTime;
+  bool _isActivityInProgress = false;
 
   CurrentGlucoseStatus() {
     _loadSnoozeSettings();
@@ -37,6 +38,7 @@ class CurrentGlucoseStatus extends ChangeNotifier {
   List<GraphPoint> get graphPoints => _graphPoints;
   String? get error => _error;
   String? get lastUpdateTime => _lastUpdateTime;
+  bool get isActivityInProgress => _isActivityInProgress;
   
   bool get isSnoozed =>
       _snoozeUntil != null && _snoozeUntil!.isAfter(DateTime.now());
@@ -58,6 +60,7 @@ class CurrentGlucoseStatus extends ChangeNotifier {
   void updateFromBackground(Map<String, dynamic> data) {
     _currentGlucose = data['value']?.toDouble();
     _error = data['error'];
+    _isActivityInProgress = data['isActivityInProgress'] ?? false;
     
     if (data['graphData'] != null) {
       final List<dynamic> rawPoints = data['graphData'];
@@ -68,10 +71,6 @@ class CurrentGlucoseStatus extends ChangeNotifier {
       _lastUpdateTime = _formatTimestamp(data['timestamp']);
     }
 
-    // Note: We no longer check for alerts here. 
-    // The BackgroundGlucoseService handles alerts directly via NotificationService,
-    // which ensures they fire even if the app is closed or in the background.
-    
     notifyListeners();
   }
 

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants.dart';
+import 'constants_service.dart';
 
 class NotificationService {
   static final NotificationService _notificationService = NotificationService._internal();
@@ -12,11 +13,21 @@ class NotificationService {
   NotificationService._internal();
 
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+  final AppConstants _constants = ConstantsService();
 
   // Stream to listen for notification actions (like Snooze)
   final StreamController<String> snoozeStream = StreamController<String>.broadcast();
 
   static const String _snoozeKey = 'snooze_until';
+
+  @pragma('vm:entry-point')
+  static Future<void> notificationTapBackground(NotificationResponse notificationResponse) async {
+    if (notificationResponse.actionId == 'snooze_30') {
+      final prefs = await SharedPreferences.getInstance();
+      final snoozeUntil = DateTime.now().add(const Duration(minutes: 30));
+      await prefs.setString(_snoozeKey, snoozeUntil.toIso8601String());
+    }
+  }
 
   Future<void> init() async {
     const AndroidInitializationSettings initializationSettingsAndroid =
@@ -41,6 +52,7 @@ class NotificationService {
           snoozeStream.add('30');
         }
       },
+      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
   }
 
@@ -52,9 +64,11 @@ class NotificationService {
 
   Future<bool> isSnoozed() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
     final snoozeStr = prefs.getString(_snoozeKey);
     if (snoozeStr == null) return false;
-    final snoozeUntil = DateTime.parse(snoozeStr);
+    final snoozeUntil = DateTime.tryParse(snoozeStr);
+    if (snoozeUntil == null) return false;
     return snoozeUntil.isAfter(DateTime.now());
   }
 
@@ -63,16 +77,19 @@ class NotificationService {
     await prefs.remove(_snoozeKey);
   }
 
-  Future<void> checkAndNotify(double glucoseValue) async {
+  Future<void> checkAndNotify(double glucoseValue, {bool isActivityInProgress = false}) async {
     if (await isSnoozed()) return;
 
-    if (glucoseValue > AppConstants.highLimit) {
+    final lowLimit = _constants.getLowLimit(isActivityInProgress);
+    final highLimit = _constants.getHighLimit(isActivityInProgress);
+
+    if (glucoseValue > highLimit) {
       await showNotification(
         0,
         'High Glucose Alert',
         'Your glucose level is high: ${glucoseValue.toStringAsFixed(1)} mmol/L',
       );
-    } else if (glucoseValue < AppConstants.lowLimit) {
+    } else if (glucoseValue < lowLimit) {
       await showNotification(
         1,
         'Low Glucose Alert',

@@ -3,16 +3,13 @@ import 'package:flutter/material.dart';
 class ChatEmptyState extends StatelessWidget {
   final Function(String) onSuggestionSelected;
 
-  const ChatEmptyState({
-    Key? key,
-    required this.onSuggestionSelected,
-  }) : super(key: key);
+  const ChatEmptyState({Key? key, required this.onSuggestionSelected})
+    : super(key: key);
 
   static const List<String> _suggestions = [
-    "How is my current glucose looking?",
-    "What should I do if my readings are high?",
-    "How does activity affect my glucose?",
-    "What are some healthy low-glycemic snacks?"
+    "How did my sleep and recovery impact my glucose today?",
+    "How are my recent Garmin activities affecting my blood sugar?",
+    "Given the last few days, should I adjust my insulin ratio up or down?",
   ];
 
   @override
